@@ -3,3 +3,4 @@
 **/*/*.code-workspace
 **/*/__pycache__/*
 samples/*
+**/*/*.tar
