@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cosine
 
-from .utils import getStopWordsSet, DataColumn
+from .utils import getStopWordsSet, DataColumn, printMd
 
 
 IT = TypeVar('IT')
@@ -52,6 +52,7 @@ class MaxLengthSortedList(SortedKeyList, Generic[T]):
 
     def setMaxLength(self, len: int):
         self.__maxLength__ = len
+        self.__discardExtra__()
 
     def __discardExtra__(self):
         while len(self) > self.__maxLength__:
@@ -75,9 +76,9 @@ class BookRecommender:
         vectorizedDesc = self.__vectorizeDescriptions__(bookDesc[:min(numBooks, len(bookDesc))])
 
         self.__calculator__ = PairwiseCalculator(
-            vectorizedDesc,
-            cosine,
-            np.float32
+            samples=vectorizedDesc,
+            calcFn=cosine,
+            dtype=np.double
         )        
 
         self.__mostSimilar__: defaultdict[
@@ -109,8 +110,8 @@ class BookRecommender:
             max_df=0.85, min_df=0.01
         )
         
-        # return vectorizer.fit_transform(raw_documents=df).toarray()
-        return vectorizer.fit_transform(raw_documents=df).todense()
+        return vectorizer.fit_transform(raw_documents=df).toarray()
+        #return vectorizer.fit_transform(raw_documents=df).todense()
 
     def storeSimilarity(self, i: int, j: int, res: float):
         self.__mostSimilar__[i].add( (j, res) )
@@ -121,11 +122,11 @@ class BookRecommender:
 
     def getRecommendationResult(self, idx: int, s: StoredSimilarity):
         book = self.__books__.loc[s[0]]
-        txt = f"{idx}. {book[DataColumn.TITLE]}\nDescription: {book[DataColumn.DESCRIPTION]}\nScore: {s[1]}"
-        return '\n'.join(
+        txt = f"{idx}. **{book[DataColumn.TITLE]}** \\\n <u>Description</u>: {book[DataColumn.DESCRIPTION]}  \\\n <u>Score</u>: {s[1]}"
+        return '\\\n'.join(
             textwrap.wrap(
                 txt,
-                width=80,
+                width=100,
                 break_long_words=False,
                 replace_whitespace=False
             )
@@ -139,15 +140,15 @@ class BookRecommender:
 
             idx = foundIdx[0]
             book = self.__books__.loc[idx]
-            print(f"Recommending up to {num} books similar to: '{book[DataColumn.TITLE]}'")
-            print('---------------------------------------\n')
+            printMd(f"Recommending up to {num} books similar to **{book[DataColumn.TITLE]}**")
+            printMd('***')
 
             for i, s in enumerate(self.__mostSimilar__[idx]):
                 res.append(self.getRecommendationResult(i + 1, s) + '\n')
                 if i + 1 >= num:
                     break
 
-            print('\n'.join(res))        
-            print('---------------------------------------')
+            printMd('\n'.join(res))        
+            printMd('***')
         else:
             raise Exception('Unknown `bookId` given.')        
