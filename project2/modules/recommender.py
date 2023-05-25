@@ -1,12 +1,13 @@
 from typing import TypeVar, Generic, Any, Sequence, Optional, Tuple, Callable, Iterable
 from numbers import Number
-
+import string
 from sortedcontainers import SortedKeyList
 from collections import defaultdict
 import textwrap
 
 import numpy as np
 import pandas as pd
+#from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import cosine
 
 from .utils import getStopWordsSet, DataColumn, printMd
@@ -68,7 +69,7 @@ class MaxLengthSortedList(SortedKeyList, Generic[T]):
 
 class BookRecommender:
 
-    StoredSimilarity = Tuple[int, float]
+    StoredSimilarity = Tuple[int, np.double]
 
     def __init__(self, books: pd.DataFrame, numBooks: int, numTop: int):
         
@@ -77,7 +78,7 @@ class BookRecommender:
 
         self.__calculator__ = PairwiseCalculator(
             samples=vectorizedDesc,
-            calcFn=cosine,
+            calcFn=self.calculateSimilarity,
             dtype=np.double
         )        
 
@@ -86,6 +87,7 @@ class BookRecommender:
             MaxLengthSortedList[BookRecommender.StoredSimilarity]
         ] = defaultdict(
             lambda: MaxLengthSortedList.create(
+                # Using negative key to sort in descending order
                 compareFn=lambda s: -(self.getStoredSimilarityScore(s)),
                 maxLength=numTop
             )
@@ -94,10 +96,31 @@ class BookRecommender:
         self.__books__ = books
 
     @staticmethod
+    def calculateSimilarity(x: np.ndarray, y: np.ndarray) -> np.double:
+        # return cosine_similarity(x.reshape(1, -1), y.reshape(1, -1))
+
+        # Basically, 1 - `cosine_similarity` = `cosine`
+        # https://stackoverflow.com/a/55623717/12184528
+
+        # `cosine` is MUCH faster for 1-D vectors:
+        # https://stackoverflow.com/questions/61490351/scipy-cosine-similarity-vs-sklearn-cosine-similarity
+        cos = cosine(x, y)
+        if cos == 0:
+            # If cos == 0, probably a division by 0 occured,
+            # probably due to precision loss (division by 0 generates a warning as well)
+            return 0
+        else:
+            return 1 - cos
+
+    @staticmethod
     def getStoredSimilarityScore(
         s: StoredSimilarity
     ):
         return s[1]
+    
+    @staticmethod
+    def __preprocessText__(s: str):
+        return s.translate(str.maketrans('', '', string.punctuation)).lower()
 
     @staticmethod
     def __vectorizeDescriptions__(df: pd.DataFrame):
@@ -107,13 +130,14 @@ class BookRecommender:
         vectorizer = TfidfVectorizer(
             stop_words=list(getStopWordsSet()),
             ngram_range=(1, 1),
-            max_df=0.85, min_df=0.01
+            max_df=0.85, min_df=0.01,
+            strip_accents='unicode'
         )
         
-        return vectorizer.fit_transform(raw_documents=df).toarray()
+        return vectorizer.fit_transform(raw_documents=list(df)).toarray()
         #return vectorizer.fit_transform(raw_documents=df).todense()
 
-    def storeSimilarity(self, i: int, j: int, res: float):
+    def storeSimilarity(self, i: int, j: int, res: np.double):
         self.__mostSimilar__[i].add( (j, res) )
         self.__mostSimilar__[j].add( (i, res) )
 
