@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Any, Sequence, Optional, Tuple, Callable, Iterable
+from typing import TypeVar, Generic, Any, Sequence, Optional, Tuple, Callable, Iterable, Type
 from numbers import Number
 import string
 from sortedcontainers import SortedKeyList
@@ -8,9 +8,12 @@ import textwrap
 import numpy as np
 import pandas as pd
 #from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import CountVectorizer
 from scipy.spatial.distance import cosine
 
-from .utils import getStopWordsSet, DataColumn, printMd
+from tqdm.notebook import tqdm
+
+from .utils import DataColumn, printMd
 
 
 IT = TypeVar('IT')
@@ -33,14 +36,25 @@ class PairwiseCalculator(Generic[IT, RT]):
         for i in range(numInstances):
             self.__results__[i] = np.empty(shape=(numInstances - (1 + i)), dtype=dtype)
 
-    def calculate(self, resultProcessor: Optional[Callable[[int, int, RT], Optional[Any]]] = None):    
-        for i in range(len(self.__samples__)):
+    def calculate(
+        self,
+        resultProcessor: Optional[Callable[[int, int, RT], Optional[Any]]] = None,
+        showProgress: bool = True
+    ):
+        iterRange = range(len(self.__samples__))
+        if showProgress:
+            iterator = tqdm(
+                iterRange,
+                bar_format='{desc}{bar} {n}/{total} -- Time Elapsed: {elapsed}'
+            )
+        else:
+            iterator = iterRange
+        for i in iterator:
             for j in range(i + 1, len(self.__samples__)):
                 res = self.__calc__(self.__samples__[i], self.__samples__[j])
                 self.__results__[i][j - (i + 1)] = res
                 if resultProcessor:
                     resultProcessor(i, j, res)
-        return self
 
 T = TypeVar('T')
 class MaxLengthSortedList(SortedKeyList, Generic[T]):
@@ -71,9 +85,17 @@ class BookRecommender:
 
     StoredSimilarity = Tuple[int, np.double]
 
-    def __init__(self, books: pd.DataFrame, numBooks: int, numTop: int):
+    def __init__(
+        self,
+        books: pd.DataFrame,
+        numBooks: int,
+        numTop: int,
+        vectorizer: CountVectorizer
+    ):
         
         bookDesc = books[DataColumn.DESCRIPTION]
+
+        self.__vectorizer__ = vectorizer
         vectorizedDesc = self.__vectorizeDescriptions__(bookDesc[:min(numBooks, len(bookDesc))])
 
         self.__calculator__ = PairwiseCalculator(
@@ -88,12 +110,12 @@ class BookRecommender:
         ] = defaultdict(
             lambda: MaxLengthSortedList.create(
                 # Using negative key to sort in descending order
-                compareFn=lambda s: -(self.getStoredSimilarityScore(s)),
+                compareFn=lambda s: -(self.__getStoredSimilarityScore__(s)),
                 maxLength=numTop
             )
         )
 
-        self.__books__ = books
+        self.__books__ = books        
 
     @staticmethod
     def calculateSimilarity(x: np.ndarray, y: np.ndarray) -> np.double:
@@ -113,7 +135,7 @@ class BookRecommender:
             return 1 - cos
 
     @staticmethod
-    def getStoredSimilarityScore(
+    def __getStoredSimilarityScore__(
         s: StoredSimilarity
     ):
         return s[1]
@@ -122,25 +144,16 @@ class BookRecommender:
     def __preprocessText__(s: str):
         return s.translate(str.maketrans('', '', string.punctuation)).lower()
 
-    @staticmethod
-    def __vectorizeDescriptions__(df: pd.DataFrame):
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        
-        vectorizer = TfidfVectorizer(
-            stop_words=list(getStopWordsSet()),
-            ngram_range=(1, 1),
-            max_df=0.85, min_df=0.01,
-            strip_accents='unicode'
-        )
-        
-        return vectorizer.fit_transform(raw_documents=list(df)).toarray()
+    def __vectorizeDescriptions__(self, df: pd.DataFrame):    
+        return self.__vectorizer__.fit_transform(raw_documents=list(df)).toarray()
 
-    def storeSimilarity(self, i: int, j: int, res: np.double):
+    def __storeSimilarity__(self, i: int, j: int, res: np.double):
         self.__mostSimilar__[i].add( (j, res) )
         self.__mostSimilar__[j].add( (i, res) )
 
-    def findMostSimilar(self):
-        self.__calculator__.calculate(self.storeSimilarity)
+    def findMostSimilar(self, showProgress: bool):
+        self.__calculator__.calculate(self.__storeSimilarity__)
+        return self
 
     def __displayBookRecommendation__(self, recIdx: int, s: StoredSimilarity):
 
