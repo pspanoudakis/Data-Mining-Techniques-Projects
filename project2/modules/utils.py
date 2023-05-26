@@ -12,7 +12,10 @@ from IPython.display import display, Markdown
 TRet = TypeVar('TRet')
 TParams = ParamSpec('TParams')
 def runWithNoWarnings(fn: Callable[TParams, TRet], *args: TParams.args, **kwargs: TParams.kwargs) -> TRet:
-    """ Executes `fn` with the specified `*args` and `**kwargs` while ignoring any raised warnings. """
+    """
+        Executes `fn` with the specified `*args` & `**kwargs` while ignoring any raised warnings,
+        and returns the function return value.
+    """
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore')
         return fn(*args, **kwargs)
