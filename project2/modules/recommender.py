@@ -106,8 +106,8 @@ class BookRecommender:
         # https://stackoverflow.com/questions/61490351/scipy-cosine-similarity-vs-sklearn-cosine-similarity
         cos = cosine(x, y)
         if cos == 0:
-            # If cos == 0, probably a division by 0 occured,
-            # probably due to precision loss (division by 0 generates a warning as well)
+            # If cos == 0, probably a division by 0 occured (which should generate a warning as well),
+            # most likely due to precision loss.
             return 0
         else:
             return 1 - cos
@@ -126,7 +126,6 @@ class BookRecommender:
     def __vectorizeDescriptions__(df: pd.DataFrame):
         from sklearn.feature_extraction.text import TfidfVectorizer
         
-        # How to minimize dimensions?
         vectorizer = TfidfVectorizer(
             stop_words=list(getStopWordsSet()),
             ngram_range=(1, 1),
@@ -135,7 +134,6 @@ class BookRecommender:
         )
         
         return vectorizer.fit_transform(raw_documents=list(df)).toarray()
-        #return vectorizer.fit_transform(raw_documents=df).todense()
 
     def storeSimilarity(self, i: int, j: int, res: np.double):
         self.__mostSimilar__[i].add( (j, res) )
@@ -144,22 +142,28 @@ class BookRecommender:
     def findMostSimilar(self):
         self.__calculator__.calculate(self.storeSimilarity)
 
-    def getRecommendationResult(self, idx: int, s: StoredSimilarity):
-        book = self.__books__.loc[s[0]]
-        txt = f"{idx}. **{book[DataColumn.TITLE]}** \\\n <u>Description</u>: {book[DataColumn.DESCRIPTION]}  \\\n <u>Score</u>: {s[1]}"
-        return '\\\n'.join(
+    def __displayBookRecommendation__(self, recIdx: int, s: StoredSimilarity):
+
+        recBook = self.__books__.loc[s[0]]
+
+        printMd(f"{recIdx}. **{recBook[DataColumn.TITLE]}**")
+
+        desc = '\\\n'.join(
             textwrap.wrap(
-                txt,
+                recBook[DataColumn.DESCRIPTION],
                 width=100,
                 break_long_words=False,
-                replace_whitespace=False
+                replace_whitespace=False,
+                fix_sentence_endings=True
             )
         )
+        printMd(f"<u>Description</u>: {desc}")
+
+        printMd(f"<u>Score</u>: {s[1]}")
 
     def showRecommendations(self, bookId: str, num: int = 5):
         foundIdx = np.where(self.__books__[DataColumn.BOOKID] == bookId)[0]
 
-        res = []
         if len(foundIdx):
 
             idx = foundIdx[0]
@@ -168,11 +172,10 @@ class BookRecommender:
             printMd('***')
 
             for i, s in enumerate(self.__mostSimilar__[idx]):
-                res.append(self.getRecommendationResult(i + 1, s) + '\n')
+                self.__displayBookRecommendation__(i + 1, s)
                 if i + 1 >= num:
                     break
-
-            printMd('\n'.join(res))        
+     
             printMd('***')
         else:
             raise Exception('Unknown `bookId` given.')        
