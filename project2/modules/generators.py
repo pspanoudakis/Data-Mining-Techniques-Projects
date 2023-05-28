@@ -15,6 +15,7 @@ class AnswerGenerator(ABC, Generic[QT]):
     """
         Used to generate `DataFrame` answers on Dataset-related questions.
     """
+
     def __init__(self) -> None:
         self.questions: List[QT] = []
 
@@ -34,7 +35,24 @@ class AnswerGenerator(ABC, Generic[QT]):
     def createDataFrameAnswer(self, q: QT, df: Optional[pd.DataFrame]) -> pd.DataFrame:
         pass
 
-    def generateAnswers(self, df: pd.DataFrame):
+    def generateAnswer(self, df: pd.DataFrame, q: QT):
+        """
+            Generates the `pd.Dataframe` answer for question `q`, using data in `df`.
+
+            This method applies any data filtering and/or answer size restrictions specified in `q`,
+            essentially acting as a wrapper for `createDataFrameAnswer`,
+            which is expected to be implemented by child classes.
+        """
+
+        q['dataFilter'] = q.get('dataFilter')
+        q['limit'] = int(q.get('limit') or 0)
+        
+        filteredDf = q['dataFilter'](df) if q['dataFilter'] else df
+        answer = self.createDataFrameAnswer(q, filteredDf)
+        limit = q['limit'] if q['limit'] else answer.shape[0]
+        return answer.head(n=limit)
+
+    def displayAnswers(self, df: pd.DataFrame):
         """
             Displays the answer for each question provided to the
             `AnswerGenerator`, using data in `df`.
@@ -44,15 +62,8 @@ class AnswerGenerator(ABC, Generic[QT]):
         """
         
         for q in self.questions:
-            q['dataFilter'] = q.get('dataFilter')
-            q['limit'] = int(q.get('limit') or 0)
-            
-            filteredDf = q['dataFilter'](df) if q['dataFilter'] else df
-            answer = self.createDataFrameAnswer(q, filteredDf)
-            limit = q['limit'] if q['limit'] else answer.shape[0]
-            
-            printMd(f'**{q["qnum"]}**. {q["qtitle"]}:')
-            display(answer.head(n=limit))
+            printMd(f'**{q.get("qnum")}**. {q.get("qtitle")}:')
+            display(self.generateAnswer(df, q))
 
 class TopColumnValuesAnswerGenerator(AnswerGenerator[TopColumnValuesQuestion]):
     """
@@ -90,13 +101,13 @@ class TopColumnValuesAnswerGenerator(AnswerGenerator[TopColumnValuesQuestion]):
                 
                 ans = pd.DataFrame(
                     valueCount.items(),
-                    columns=[q['col'].capitalize(), 'Books']
+                    columns=[q['col'], 'Books']
                 ).sort_values(by='Books', ascending=False)
                 ans.reset_index(inplace=True, drop=True)
 
             else:
                 ans = self.__data__.value_counts().sort_values(ascending=False).to_frame().reset_index()
-                ans.columns = [q['col'].capitalize(), 'Books']            
+                ans.columns = [q['col'], 'Books']            
         else:
             col = q['countCol']
             
@@ -109,7 +120,7 @@ class TopColumnValuesAnswerGenerator(AnswerGenerator[TopColumnValuesQuestion]):
             countColStr = f'Total {q["countCol"]}'
             ans = pd.DataFrame(
                     valueCount.items(),
-                    columns=[q['col'].capitalize(), countColStr]
+                    columns=[q['col'], countColStr]
                 ).sort_values(by=countColStr, ascending=False)
             ans.reset_index(inplace=True, drop=True)
         

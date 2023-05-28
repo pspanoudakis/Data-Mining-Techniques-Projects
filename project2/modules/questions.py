@@ -8,9 +8,9 @@ import pandas as pd
 class AnswerGeneratorQuestion(TypedDict):
     """ Used to store question-specific information. """
     
-    qnum: str
+    qnum: NotRequired[str]
     """ Question Number. """
-    qtitle: str
+    qtitle: NotRequired[str]
     """ Question Title. """
     col: str
     """ Column title. """
