@@ -1,4 +1,4 @@
-from typing import Callable, TypeVar
+from typing import Callable, TypeVar, Set
 from typing_extensions import ParamSpec
 
 import warnings
@@ -27,11 +27,13 @@ def printMd(s: str):
 def printDatasetShape(dataset: pd.DataFrame):
     print(f'Dataset Shape:\nRows: {dataset.shape[0]}, Columns: {dataset.shape[1]}')
 
-def getStopWordsSet():
+def getStopWordsSet() -> Set[str]:
     stopWordsSet = set()
     stopWordsSet.update(wordcloud.STOPWORDS)
     stopWordsSet.update(nltk.corpus.stopwords.words('english'))
     return stopWordsSet
+
+STOP_WORDS = getStopWordsSet()
 
 class DataColumn:
     """ Autocomplete (& typo prevention) helper for Column Titles. """
