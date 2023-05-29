@@ -1,4 +1,4 @@
-from typing import Callable, TypeVar, Set
+from typing import Callable, TypeVar, Set, Iterable
 from typing_extensions import ParamSpec
 
 import warnings
@@ -8,6 +8,7 @@ import nltk
 import pandas as pd
 
 from IPython.display import display, Markdown
+from tqdm.notebook import tqdm
 
 TRet = TypeVar('TRet')
 TParams = ParamSpec('TParams')
@@ -23,6 +24,21 @@ def runWithNoWarnings(fn: Callable[TParams, TRet], *args: TParams.args, **kwargs
 def printMd(s: str):
     """ Displays `s` as Markdown text in the output cell. """
     display(Markdown(s))
+
+T = TypeVar('T')
+def progressBarItr(
+    itr: Iterable[T],
+    showBar: bool = True,
+    totalIterations: "int | None" = None
+) -> Iterable[T]:
+    if showBar:
+        return tqdm(
+            itr,
+            total=totalIterations,
+            bar_format='{desc}{bar} {n}/{total} -- Time Elapsed: {elapsed}'
+        )
+
+    return itr
 
 def printDatasetShape(dataset: pd.DataFrame):
     print(f'Dataset Shape:\nRows: {dataset.shape[0]}, Columns: {dataset.shape[1]}')

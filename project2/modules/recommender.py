@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Any, Sequence, Optional, Tuple, Callable, Iterable, Type
+from typing import TypeVar, Generic, Any, Sequence, Optional, Tuple, Callable, Iterable
 from numbers import Number
 import string
 from sortedcontainers import SortedKeyList
@@ -11,9 +11,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from scipy.spatial.distance import cosine
 
-from tqdm.notebook import tqdm
-
-from .utils import DataColumn, printMd
+from .utils import DataColumn, printMd, progressBarItr
 
 
 IT = TypeVar('IT')
@@ -42,13 +40,8 @@ class PairwiseCalculator(Generic[IT, RT]):
         showProgress: bool = True
     ):
         iterRange = range(len(self.__samples__))
-        if showProgress:
-            iterator = tqdm(
-                iterRange,
-                bar_format='{desc}{bar} {n}/{total} -- Time Elapsed: {elapsed}'
-            )
-        else:
-            iterator = iterRange
+        iterator = progressBarItr(iterRange, showBar=showProgress)
+        
         for i in iterator:
             for j in range(i + 1, len(self.__samples__)):
                 res = self.__calc__(self.__samples__[i], self.__samples__[j])

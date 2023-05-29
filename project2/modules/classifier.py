@@ -8,9 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, KFold
 from gensim.models import Word2Vec
 
-from tqdm.notebook import tqdm
-
-from .utils import printMd, DataColumn, STOP_WORDS
+from .utils import printMd, DataColumn, STOP_WORDS, progressBarItr
 
 class SentencesVectorizer:
     def __init__(self, word2vec: Word2Vec) -> None:
@@ -119,14 +117,12 @@ class BookGenreClassifier:
     def performKFold(self, k: int, estimatorFactory: EstimatorFactory, verbose: bool = True):
 
         kfold = KFold(n_splits=k)
-        foldItr = kfold.split(self.__trainX__)
 
-        if verbose:
-            foldItr = tqdm(
-                foldItr,
-                total=kfold.get_n_splits(),
-                bar_format='{desc}{bar} {n}/{total} -- Time Elapsed: {elapsed}'
-            )
+        foldItr = progressBarItr(
+            itr=kfold.split(self.__trainX__),
+            showBar=verbose,
+            totalIterations=kfold.get_n_splits()
+        )
 
         for i, (trainIds, testIds) in enumerate(foldItr):
             trainX = self.__trainX__[trainIds]
