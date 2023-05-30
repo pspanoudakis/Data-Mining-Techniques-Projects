@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable
+from typing import Sequence, Union, Callable, Optional
 import string
 
 import numpy as np
@@ -34,8 +34,8 @@ class SentencesVectorizer:
 
 class BookGenreClassifier:
 
-    SupportedEstimator = Union[GaussianNB, RandomForestClassifier]
-    EstimatorFactory = Callable[[], SupportedEstimator]
+    SupportedModel = Union[GaussianNB, RandomForestClassifier]
+    ModelFactory = Callable[[], SupportedModel]
 
     def __init__(self) -> None:
         self.vectorSize: int
@@ -48,13 +48,22 @@ class BookGenreClassifier:
         self.__testY__: np.ndarray
 
         self.labels: Sequence[str]
+        self.model: Optional[BookGenreClassifier.SupportedModel]
 
     @staticmethod
     def cleanDescription(s: str):
         s = ''.join(c.lower() if (ord(c) < 128 and c not in (string.punctuation + string.digits)) else ' ' for c in s)    
         return (' '.join((w for w in s.split() if w not in STOP_WORDS))).strip()
+
+    @staticmethod
+    def shuffleXY(x: np.ndarray, y: np.ndarray):
+        if len(x) != len(y):
+            raise AssertionError(f'Cannot unison-shuffle arrays of lengths [{len(x)}, {len(y)}]')
         
-    def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int):
+        ids = np.random.permutation(len(x))
+        return x[ids], y[ids]
+
+    def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int, shuffle: bool = True):
         self.vectorSize = vectorSize
         self.vectorizer = SentencesVectorizer(Word2Vec(
             sentences=[s.encode('utf-8').split() for s in booksDf[DataColumn.DESCRIPTION].values],
@@ -67,6 +76,9 @@ class BookGenreClassifier:
         X = self.vectorizer.createVectors(cleanDesc)
         Y = booksDf[DataColumn.GENRESINGLE].loc[cleanDesc.index].values
 
+        if shuffle:
+            X, Y = self.shuffleXY(X, Y)
+
         self.labels = np.unique(Y)
         (
             self.__trainX__,
@@ -76,25 +88,23 @@ class BookGenreClassifier:
         ) = train_test_split(X, Y, train_size=0.8, shuffle=False)
 
         return self
-    
-    def setEstimator(self, estimatorFactory: EstimatorFactory):
-        self.__estimator__ = estimatorFactory()    
 
     def __doCrossValidation__(
         self,
-        estimator: SupportedEstimator,
+        model: SupportedModel,
         trainX: np.ndarray,
         trainY: np.ndarray,
         testX: np.ndarray,
         testY: np.ndarray,
         verbose: bool = True
     ):
-        estimator.fit(trainX, trainY)
-        # trainPred = estimator.predict(trainX)
-        # testPred = estimator.predict(testX)
+        self.model = model
+        self.model.fit(trainX, trainY)
+        # trainPred = model.predict(trainX)
+        # testPred = model.predict(testX)
 
-        trainScore = estimator.score(trainX, trainY)
-        testScore = estimator.score(testX, testY)
+        trainScore = self.model.score(trainX, trainY)
+        testScore = self.model.score(testX, testY)
 
         if verbose:
             printMd(f'Train Set Accuracy: {trainScore}')
@@ -102,9 +112,9 @@ class BookGenreClassifier:
 
         return trainScore, testScore
 
-    def performCrossValidation(self, estimatorFactory: EstimatorFactory, verbose: bool = True):
+    def performCrossValidation(self, modelFactory: ModelFactory, verbose: bool = True):
         self.__doCrossValidation__(
-            estimatorFactory(),
+            modelFactory(),
             self.__trainX__,
             self.__trainY__,
             self.__testX__,
@@ -114,7 +124,7 @@ class BookGenreClassifier:
 
         return self
 
-    def performKFold(self, k: int, estimatorFactory: EstimatorFactory, verbose: bool = True):
+    def performKFold(self, k: int, modelFactory: ModelFactory, verbose: bool = True):
 
         kfold = KFold(n_splits=k)
 
@@ -134,7 +144,7 @@ class BookGenreClassifier:
             printMd(f'***\n**Fold {i + 1}**')
 
             self.__doCrossValidation__(
-                estimatorFactory(),
+                modelFactory(),
                 trainX,
                 trainY,
                 testX,
