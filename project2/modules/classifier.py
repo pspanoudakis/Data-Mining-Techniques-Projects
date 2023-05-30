@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable, Optional
+from typing import Sequence, Union, Callable, Optional, Dict, Tuple, Literal, Any
 import string
 
 import numpy as np
@@ -6,10 +6,10 @@ import pandas as pd
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, KFold
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from gensim.models import Word2Vec
 
-from .utils import printMd, DataColumn, STOP_WORDS, progressBarItr
-
+from .utils import DataColumn, STOP_WORDS, progressBarItr, runWithNoWarnings
 class SentencesVectorizer:
     def __init__(self, word2vec: Word2Vec) -> None:
         self.vectors: np.ndarray
@@ -36,6 +36,16 @@ class BookGenreClassifier:
 
     SupportedModel = Union[GaussianNB, RandomForestClassifier]
     ModelFactory = Callable[[], SupportedModel]
+    MetricScores = Dict[
+        Literal['Accuracy', 'F-Score', 'Precision', 'Recall'], Any
+    ]
+    CrossValidationResults = Tuple[
+        Dict[
+            Literal['Train', 'Test'], MetricScores
+        ],
+        pd.DataFrame
+    ]
+        
 
     def __init__(self) -> None:
         self.vectorSize: int
@@ -88,6 +98,17 @@ class BookGenreClassifier:
         ) = train_test_split(X, Y, train_size=0.8, shuffle=False)
 
         return self
+    
+    @staticmethod
+    def calculateMetricScores(yTrue: Sequence[str], yPred: Sequence[str]) -> MetricScores:
+        
+        pre, rec, f, _ = precision_recall_fscore_support(yTrue, yPred, average='macro')
+        return {
+            'Accuracy': accuracy_score(yTrue, yPred),
+            'F-Score': f,
+            'Precision': pre,
+            'Recall': rec
+        }
 
     def __doCrossValidation__(
         self,
@@ -95,34 +116,36 @@ class BookGenreClassifier:
         trainX: np.ndarray,
         trainY: np.ndarray,
         testX: np.ndarray,
-        testY: np.ndarray,
-        verbose: bool = True
-    ):
+        testY: np.ndarray
+    ) -> CrossValidationResults:
         self.model = model
         self.model.fit(trainX, trainY)
-        # trainPred = model.predict(trainX)
-        # testPred = model.predict(testX)
+        trainPred = model.predict(trainX)
+        testPred = model.predict(testX)
 
-        trainScore = self.model.score(trainX, trainY)
-        testScore = self.model.score(testX, testY)
+        results = {}
+        for s, y, pred in (
+            ('Train', trainY, trainPred),
+            ('Test', testY, testPred)
+        ):
+            results[s] = runWithNoWarnings(lambda: self.calculateMetricScores(y, pred))
 
-        if verbose:
-            printMd(f'Train Set Accuracy: {trainScore}')
-            printMd(f'Test Set Accuracy: {testScore}')
+        df = pd.DataFrame.from_dict({
+            s: {metric: results[s][metric] for metric in results[s]} for s in results
+        }, orient='index')
 
-        return trainScore, testScore
+        return results, df
 
-    def performCrossValidation(self, modelFactory: ModelFactory, verbose: bool = True):
-        self.__doCrossValidation__(
+    def performCrossValidation(self, modelFactory: ModelFactory):
+        _, df = self.__doCrossValidation__(
             modelFactory(),
             self.__trainX__,
             self.__trainY__,
             self.__testX__,
-            self.__testY__,
-            verbose=verbose
+            self.__testY__
         )
 
-        return self
+        return df
 
     def performKFold(self, k: int, modelFactory: ModelFactory, verbose: bool = True):
 
@@ -134,20 +157,26 @@ class BookGenreClassifier:
             totalIterations=kfold.get_n_splits()
         )
 
-        for i, (trainIds, testIds) in enumerate(foldItr):
+        dfs = []
+        for trainIds, testIds in foldItr:
             trainX = self.__trainX__[trainIds]
             trainY = self.__trainY__[trainIds]
 
             testX = self.__trainX__[testIds]
             testY = self.__trainY__[testIds]
 
-            printMd(f'***\n**Fold {i + 1}**')
-
-            self.__doCrossValidation__(
+            _, df = self.__doCrossValidation__(
                 modelFactory(),
                 trainX,
                 trainY,
                 testX,
-                testY,
-                verbose=True
+                testY
             )
+            dfs.append(df)
+
+        result = dfs[0]
+        for df in dfs[1:]:
+            result += df
+        
+        result /= len(dfs)
+        return result
