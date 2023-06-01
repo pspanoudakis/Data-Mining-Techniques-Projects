@@ -9,6 +9,7 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.preprocessing import StandardScaler
 
 from gensim.models import Word2Vec
 
@@ -76,7 +77,7 @@ class BookGenreClassifier:
         ids = np.random.permutation(len(x))
         return x[ids], y[ids]
 
-    def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int, shuffle: bool = True):
+    def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int, scale: bool = False, shuffle: bool = True):
         self.vectorSize = vectorSize
         self.vectorizer = SentencesVectorizer(Word2Vec(
             sentences=[s.encode('utf-8').split() for s in booksDf[DataColumn.DESCRIPTION].values],
@@ -100,7 +101,10 @@ class BookGenreClassifier:
             self.__testY__,
         ) = train_test_split(X, Y, train_size=0.8, shuffle=False)
 
-        return self
+        if scale:
+            self.__trainX__ = StandardScaler().fit_transform(self.__trainX__)
+
+        return X, Y
     
     @staticmethod
     def calculateMetricScores(yTrue: Sequence[str], yPred: Sequence[str]) -> MetricScores:
