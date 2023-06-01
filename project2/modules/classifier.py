@@ -3,10 +3,13 @@ import string
 
 import numpy as np
 import pandas as pd
+
 from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+
 from gensim.models import Word2Vec
 
 from .utils import DataColumn, STOP_WORDS, progressBarItr, runWithNoWarnings
@@ -34,7 +37,7 @@ class SentencesVectorizer:
 
 class BookGenreClassifier:
 
-    SupportedModel = Union[GaussianNB, RandomForestClassifier]
+    SupportedModel = Union[GaussianNB, RandomForestClassifier, SVC]
     ModelFactory = Callable[[], SupportedModel]
     MetricScores = Dict[
         Literal['Accuracy', 'F-Score', 'Precision', 'Recall'], Any
@@ -66,7 +69,7 @@ class BookGenreClassifier:
         return (' '.join((w for w in s.split() if w not in STOP_WORDS))).strip()
 
     @staticmethod
-    def shuffleXY(x: np.ndarray, y: np.ndarray):
+    def __shuffleXY__(x: np.ndarray, y: np.ndarray):
         if len(x) != len(y):
             raise AssertionError(f'Cannot unison-shuffle arrays of lengths [{len(x)}, {len(y)}]')
         
@@ -87,7 +90,7 @@ class BookGenreClassifier:
         Y = booksDf[DataColumn.GENRESINGLE].loc[cleanDesc.index].values
 
         if shuffle:
-            X, Y = self.shuffleXY(X, Y)
+            X, Y = self.__shuffleXY__(X, Y)
 
         self.labels = np.unique(Y)
         (
@@ -118,12 +121,14 @@ class BookGenreClassifier:
         testX: np.ndarray,
         testY: np.ndarray
     ) -> CrossValidationResults:
+        
         self.model = model
-        self.model.fit(trainX, trainY)
-        trainPred = model.predict(trainX)
-        testPred = model.predict(testX)
 
-        results = {}
+        self.model.fit(trainX, trainY)
+        trainPred = self.model.predict(trainX)
+        testPred = self.model.predict(testX)
+
+        results: Dict[Literal['Train', 'Test'], BookGenreClassifier.MetricScores] = {}
         for s, y, pred in (
             ('Train', trainY, trainPred),
             ('Test', testY, testPred)
@@ -136,9 +141,9 @@ class BookGenreClassifier:
 
         return results, df
 
-    def performCrossValidation(self, modelFactory: ModelFactory):
+    def performCrossValidation(self, model: SupportedModel):
         _, df = self.__doCrossValidation__(
-            modelFactory(),
+            model,
             self.__trainX__,
             self.__trainY__,
             self.__testX__,
