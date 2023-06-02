@@ -69,29 +69,19 @@ class BookGenreClassifier:
         s = ''.join(c.lower() if (ord(c) < 128 and c not in (string.punctuation + string.digits)) else ' ' for c in s)    
         return (' '.join((w for w in s.split() if w not in STOP_WORDS))).strip()
 
-    @staticmethod
-    def __shuffleXY__(x: np.ndarray, y: np.ndarray):
-        if len(x) != len(y):
-            raise AssertionError(f'Cannot unison-shuffle arrays of lengths [{len(x)}, {len(y)}]')
-        
-        ids = np.random.permutation(len(x))
-        return x[ids], y[ids]
-
     def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int, scale: bool = False, shuffle: bool = True):
         self.vectorSize = vectorSize
-        self.vectorizer = SentencesVectorizer(Word2Vec(
-            sentences=[s.encode('utf-8').split() for s in booksDf[DataColumn.DESCRIPTION].values],
-            vector_size=self.vectorSize
-        ))
 
         cleanDesc = booksDf[DataColumn.DESCRIPTION].apply(self.cleanDescription)
         cleanDesc = cleanDesc.loc[lambda d: d != '']
 
+        self.vectorizer = SentencesVectorizer(Word2Vec(
+            sentences=[s.encode('utf-8').split() for s in cleanDesc],
+            vector_size=self.vectorSize
+        ))        
+
         X = self.vectorizer.createVectors(cleanDesc)
         Y = booksDf[DataColumn.GENRESINGLE].loc[cleanDesc.index].values
-
-        if shuffle:
-            X, Y = self.__shuffleXY__(X, Y)
 
         self.labels = np.unique(Y)
         (
@@ -99,7 +89,7 @@ class BookGenreClassifier:
             self.__testX__,
             self.__trainY__,
             self.__testY__,
-        ) = train_test_split(X, Y, train_size=0.8, shuffle=False)
+        ) = train_test_split(X, Y, train_size=0.8, shuffle=shuffle)
 
         if scale:
             self.__trainX__ = StandardScaler().fit_transform(self.__trainX__)
@@ -167,20 +157,21 @@ class BookGenreClassifier:
         )
 
         dfs = []
-        for trainIds, testIds in foldItr:
+        for i, (trainIds, testIds) in enumerate(foldItr):
             trainX = self.__trainX__[trainIds]
             trainY = self.__trainY__[trainIds]
 
             testX = self.__trainX__[testIds]
             testY = self.__trainY__[testIds]
 
-            _, df = self.__doCrossValidation__(
+            foldResults, df = self.__doCrossValidation__(
                 modelFactory(),
                 trainX,
                 trainY,
                 testX,
                 testY
             )
+            #print(f'{i}: {foldResults}')
             dfs.append(df)
 
         result = dfs[0]
