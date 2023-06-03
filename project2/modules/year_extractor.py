@@ -4,11 +4,19 @@ import re
 class YearExtractor:
 
     UNKNOWN_YEAR = -1
+    """ Unknown year / unable to extract. """
+
     CURRENT_CENT = (datetime.now().year // 100) * 100
+    """ Current century, e.g. 1900, 2000, 2100 etc. """
+
     CURRENT_CENT_YEAR = (datetime.now().year % 100)
+    """
+        Current year relative to the current century,
+        e.g. 23 for 2023, 99 for 1999 etc.
+    """
 
     @staticmethod
-    def sanitizeYear(y: int):
+    def convertToYYYY(y: int):
         if y // 1000 > 0:
             return y
         if YearExtractor.CURRENT_CENT_YEAR > y:
@@ -40,6 +48,6 @@ class YearExtractor:
             if match.group(YearExtractor.FULL_YEAR_GROUP):
                 return int(match.group(YearExtractor.FULL_YEAR_GROUP))
             else:
-                return YearExtractor.sanitizeYear(int(match.group(YearExtractor.SMALL_YEAR_GROUP)))
+                return YearExtractor.convertToYYYY(int(match.group(YearExtractor.SMALL_YEAR_GROUP)))
             
         return YearExtractor.UNKNOWN_YEAR
