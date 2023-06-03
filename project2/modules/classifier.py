@@ -14,7 +14,15 @@ from sklearn.preprocessing import StandardScaler
 from gensim.models import Word2Vec
 
 from .utils import DataColumn, STOP_WORDS, progressBarItr, runWithNoWarnings
+
 class SentencesVectorizer:
+    """
+        A helper class to generate vectors for sentences, using a pretrained
+        `Word2Vec` model.
+
+        Each sentence is assigned the mean vector of the words included in it
+        (if it is splitted).
+    """
     def __init__(self, word2vec: Word2Vec) -> None:
         self.vectors: np.ndarray
         self.__word2vec__ = word2vec
@@ -37,6 +45,15 @@ class SentencesVectorizer:
         return self.vectors
 
 class BookGenreClassifier:
+    """
+        A classifier for finding the genre of books based on their description texts.
+
+        The classifier acts as a wrapper for the sentence vectorization process,
+        the (K-Fold) cross-validation logic, and the metric scores calculation.
+
+        Any further dependencies, such as the scikit-learn estimator to be used
+        for classification, are injected.
+    """
 
     SupportedModel = Union[GaussianNB, RandomForestClassifier, SVC]
     ModelFactory = Callable[[], SupportedModel]
@@ -48,8 +65,7 @@ class BookGenreClassifier:
             Literal['Train', 'Test'], MetricScores
         ],
         pd.DataFrame
-    ]
-        
+    ]        
 
     def __init__(self) -> None:
         self.vectorSize: int
@@ -70,6 +86,15 @@ class BookGenreClassifier:
         return (' '.join((w for w in s.split() if w not in STOP_WORDS))).strip()
 
     def createTrainingData(self, booksDf: pd.DataFrame, vectorSize: int, scale: bool = False, shuffle: bool = True):
+        """
+            Vectorizes the book description sentences in `booksDf`,
+            using `Word2Vec` vectors with the given `vectorSize`.
+
+            After vectorization, it creates train & test sets using `train_test_split`.
+            It returns the generated `X` and `Y` `np.ndarray`'s (without splitting) for
+            external use.
+        """
+
         self.vectorSize = vectorSize
 
         cleanDesc = booksDf[DataColumn.DESCRIPTION].apply(self.cleanDescription)
@@ -137,6 +162,13 @@ class BookGenreClassifier:
         return results, df
 
     def performCrossValidation(self, model: SupportedModel):
+        """
+            Performs cross-validation on the given `model`, using the pre-stored
+            train & test data.
+
+            It returns a `DataFrame` with all the metric scores for both train & test sets.
+        """
+
         _, df = self.__doCrossValidation__(
             model,
             self.__trainX__,
@@ -148,6 +180,10 @@ class BookGenreClassifier:
         return df
 
     def performKFold(self, k: int, modelFactory: ModelFactory, verbose: bool = True):
+        """
+            Performs `k`-fold cross-validation, using the pre-stored train & test data.
+            In each fold, a new estimator is instantiated using `modelFactory`.
+        """
 
         kfold = KFold(n_splits=k)
 

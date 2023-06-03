@@ -17,6 +17,15 @@ from .utils import DataColumn, printMd, progressBarItr
 IT = TypeVar('IT')
 RT = TypeVar('RT')
 class PairwiseCalculator(Generic[IT, RT]):
+    """
+        A helper class for pairwise calculations, where `calc(a, b) == calc(b, a)`,
+        and `calc(i, i)` is irrelevant.
+        The calculations are performed on given items, using a provided calculation function.
+
+        Since `calc(a, b) == calc(b, a)`, there is no need to compute both:
+        For each `i`, the calculator computes and stores `calc(i, j)` only for each `j > i`.
+        If we need to retrieve `calc(j, i)` afterwards, we can rely on `calc(i, j)`.
+    """
 
     def __init__(
         self,
@@ -39,6 +48,13 @@ class PairwiseCalculator(Generic[IT, RT]):
         resultProcessor: Optional[Callable[[int, int, RT], Optional[Any]]] = None,
         showProgress: bool = True
     ):
+        """
+            Perform the pairwise calculations.
+
+            If `resultProcessor` is provided, it can be used to process a calculation
+            for external use. It is invoked as `resultProcessor(<idxA>, <idxB>, <result>)`.
+        """
+
         iterRange = range(len(self.__samples__))
         iterator = progressBarItr(iterRange, showBar=showProgress)
         
@@ -49,9 +65,25 @@ class PairwiseCalculator(Generic[IT, RT]):
                 if resultProcessor:
                     resultProcessor(i, j, res)
 
+    def getResult(self, a: int, b: int):
+
+        assert (
+            (a >= len(self.__results__)) or (b >= len(self.__results__))
+            or (a == b) or (a < 0) or (b < 0)
+        )
+
+        i = max(a, b)
+        j = a + b - i
+        return self.__results__[i][j - (i + 1)]
+
+
 T = TypeVar('T')
 class MaxLengthSortedList(SortedKeyList, Generic[T]):
-    
+    """
+        A sorted `list` with limited length. Any items exceeding this length after
+        an insertion are discarded.
+    """
+
     @staticmethod
     def create(compareFn: Callable[[T, T], "Number | float"], maxLength: int):
         ret = MaxLengthSortedList([], key=compareFn)
@@ -75,6 +107,18 @@ class MaxLengthSortedList(SortedKeyList, Generic[T]):
         self.__discardExtra__()
 
 class BookRecommender:
+    """
+        A cosine similarity-based book recommendation system.
+
+        The recommender uses `PairwiseCalculator` to calculate the book similarity scores.
+        While the calculator is running, the recommender updates a `dict` mapping `bookId`'s
+        to `MaxLengthSortedList`'s.
+
+        When the similarity `(i, j)` is computed, the recommender stores the score in both
+        books' sorted lists.
+        After all the computations are completed, the recommender will have stored the most
+        similar books for each `bookId`.
+    """
 
     StoredSimilarity = Tuple[int, np.double]
 
@@ -144,7 +188,7 @@ class BookRecommender:
         self.__mostSimilar__[i].add( (j, res) )
         self.__mostSimilar__[j].add( (i, res) )
 
-    def findMostSimilar(self, showProgress: bool):
+    def findMostSimilar(self):
         self.__calculator__.calculate(self.__storeSimilarity__)
         return self
 
