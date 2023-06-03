@@ -23,9 +23,9 @@ class SentencesVectorizer:
         return self.__word2vec__.vector_size
 
     def __saveSentenceVector__(self, idx: int, s: str):
-        words = s.encode('utf-8').split()
+        words = s.split()
         for w in words:
-            self.vectors[idx] += self.__word2vec__.wv[w][0]
+            self.vectors[idx] += self.__word2vec__.wv[w]
 
         self.vectors[idx] /= max(len(words), 1)
     
@@ -76,8 +76,9 @@ class BookGenreClassifier:
         cleanDesc = cleanDesc.loc[lambda d: d != '']
 
         self.vectorizer = SentencesVectorizer(Word2Vec(
-            sentences=[s.encode('utf-8').split() for s in cleanDesc],
-            vector_size=self.vectorSize
+            sentences=[s.split() for s in cleanDesc],
+            vector_size=self.vectorSize,
+            window=10, min_count=1
         ))        
 
         X = self.vectorizer.createVectors(cleanDesc)
